@@ -1,7 +1,7 @@
 {
-     "username" : "",
-     "password" : "",
      "groupID" : "202588177922136",
-     "comment" : "SHOTGUN",
-     "headless" : false
+     "comment" : "Shotgun",
+     "keyword" : "shotgun",
+     "headless" : true,
+     "refresh" : 4000
 }

@@ -1,12 +1,13 @@
 const puppeteer = require("puppeteer")
 
 const config = require('./config.json')
+const accounts = require('./accounts.json')
 
-let browser
+async function main(account) {
 
-let lastPost
-
-async function main() {
+     let browser
+     let posted = false
+     let feed, lastPost, newFeed, newLastPost
 
      browser = await puppeteer.launch({
           headless: config.headless
@@ -28,10 +29,10 @@ async function main() {
           waitUntil: "networkidle2"
      });
 
-     await page.type("#email", config.username, {
+     await page.type("#email", account.login, {
           delay: 30
      })
-     await page.type("#pass", config.password, {
+     await page.type("#pass", account.password, {
           delay: 30
      })
 
@@ -47,38 +48,46 @@ async function main() {
      await loginButton.click().catch((e) => console.log(e))
 
 
-     await page.waitForTimeout(10000)
+     await page.waitForTimeout(8000)
 
-     const url = `https://www.facebook.com/groups/${config.groupID}`
+     const url = `https://www.facebook.com/groups/${config.groupID}?sorting_setting=CHRONOLOGICAL`
 
      await page.goto(url)
 
-     await page.waitForTimeout(1000)
+     await page.waitForTimeout(3000)
 
      // Prendre le dernier post
-     lastPost = await page.$eval('[role="feed"] > div:nth-child(2) > div > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div:nth-child(3) > div > div > div > div', el => el.textContent)
-     console.log(lastPost)
-     
-     // Boucle :
-     setInterval(async () => {
+     await page.waitForSelector('[role="feed"] > div:nth-child(2) > div > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div:nth-child(3) > div > div > div')
+     feed = await page.$('[role="feed"] > div:nth-child(2) > div > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div:nth-child(3) > div > div > div').catch((err) => console.log("feed missing for account ", account.login))
+     lastPost = await page.evaluate(el => el.textContent, feed)
+     console.log(`last post for account ${account.login} : ${lastPost}`)
+
+     while (!posted) {
           await page.reload()
-          await page.waitForTimeout(1000)
-          // toutes les x secondes , récupérer le dernier post et le comparer a l'ancien
-          let newLastPost = await page.$eval('[role="feed"] > div:nth-child(2) > div > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div:nth-child(3) > div > div > div > div', el => el.textContent)
-          if (newLastPost != lastPost) {
+          await page.waitForSelector('[role="feed"] > div:nth-child(2) > div > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div:nth-child(3) > div > div > div')
+          newFeed = await page.$('[role="feed"] > div:nth-child(2) > div > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div:nth-child(3) > div > div > div').catch((err) => console.log("feed missing for account ", account.login))
+          newLastPost = await page.evaluate(el => el.textContent, newFeed)
+          console.log(`old post : ${lastPost} for ${account.login}`)
+          console.log(`new post : ${newLastPost} ${account.login}`)
+          if (typeof newLastPost !== 'undefined' && newLastPost != lastPost) {
                lastPost = newLastPost
-               console.log(lastPost)
-               // Si il esst différent et qu'il commence par shotgun : commenter
-               if (lastPost.toUpperCase().startsWith("// SHOTGUN //") || lastPost.toUpperCase().startsWith("SHOTGUN") || lastPost.toUpperCase().startsWith("SHOTGUN", 3) || lastPost.toUpperCase().startsWith("SHOTGUN", 4)) {
+               console.log(`NEW POST : ${newLastPost}`)
+               // Si il est différent et qu'il commence par shotgun : commenter
+               if (lastPost.toUpperCase().includes(config.keyword.toUpperCase())) {
                     await page.type('[contenteditable="true"]', config.comment, {
                          delay: 5
                     })
                     await page.type('[contenteditable="true"]', String.fromCharCode(13));
+                    await page.waitForTimeout(3000).then(posted = true)
                }
           }
-     }, 4000);
-
-
+     }
+     
+     await page.waitForTimeout(1000)
+     await browser.close()
+     return
 }
 
-main()
+accounts.list.forEach((account) => {
+     main(account)
+});
